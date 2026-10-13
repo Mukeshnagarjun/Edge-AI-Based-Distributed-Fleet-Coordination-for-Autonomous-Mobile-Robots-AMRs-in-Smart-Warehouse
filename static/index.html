@@ -1,0 +1,502 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FIELDLINE · Fleet Control</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #F3F5F2; --panel: #FFFFFF; --panel-2: #F1F4F1; --line: #E1E6E0; --line-2: #CBD3CA;
+    --text: #17201B; --muted: #5E6B64; --dim: #8A958F;
+    --accent: #0E8C62; --accent-soft: rgba(14, 140, 98, .10);
+    --warn: #B46E0A; --critical: #C83232; --info: #2563BA;
+    --floor: #FAFBF9; --floor-line: #E6EBE5; --rack: #4A5650;
+    --mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 Inter, system-ui, sans-serif; }
+  .mono { font-family: var(--mono); }
+  button { font: inherit; color: inherit; }
+
+  /* ---------- header ---------- */
+  header { display: flex; align-items: center; gap: 18px; padding: 0 24px; height: 58px; border-bottom: 1px solid var(--line); background: var(--panel); }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; letter-spacing: .14em; font-size: 15px; }
+  .brand i { width: 18px; height: 18px; border: 2px solid var(--accent); border-radius: 4px; position: relative; box-shadow: 0 0 12px rgba(14, 140, 98, .45); }
+  .brand i::after { content: ""; position: absolute; inset: 3px; background: var(--accent); border-radius: 1px; }
+  .brand span { color: var(--muted); font-weight: 500; letter-spacing: .02em; font-size: 13px; }
+  .live { display: inline-flex; align-items: center; gap: 8px; padding: 4px 12px; border-radius: 999px; border: 1px solid var(--line-2); font: 600 12px var(--mono); letter-spacing: .12em; color: var(--muted); }
+  .live::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+  .live.running { color: var(--accent); border-color: rgba(14, 140, 98, .45); background: var(--accent-soft); }
+  .live.running::before { animation: pulse 1.6s ease-in-out infinite; }
+  .live.error { color: var(--critical); border-color: rgba(200, 50, 50, .5); }
+  .live.starting { color: var(--warn); }
+  @keyframes pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(14, 140, 98, .7); } 50% { box-shadow: 0 0 0 6px rgba(14, 140, 98, 0); } }
+  .clock { margin-left: auto; display: flex; gap: 22px; color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .08em; }
+  .clock b { display: block; color: var(--text); font: 600 16px var(--mono); letter-spacing: 0; text-transform: none; }
+
+  .banner { margin: 12px 24px 0; padding: 10px 14px; border: 1px solid rgba(200, 50, 50, .5); background: rgba(200, 50, 50, .08); color: var(--critical); border-radius: 8px; display: none; }
+
+  /* ---------- metrics ---------- */
+  .metrics { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 1px; margin: 16px 24px 0; background: var(--line); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+  .metric { background: var(--panel); padding: 12px 16px; }
+  .metric small { display: block; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .08em; }
+  .metric b { font: 600 24px/1.2 var(--mono); }
+  .metric.good b { color: var(--accent); }
+  .metric.bad b { color: var(--critical); }
+
+  /* ---------- layout ---------- */
+  main { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(360px, 1fr); gap: 16px; padding: 16px 24px 24px; align-items: start; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; min-width: 0; box-shadow: 0 1px 2px rgba(16, 24, 20, .05); }
+  .panel > h2 { margin: 0; padding: 14px 18px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .1em; color: var(--muted); display: flex; align-items: center; justify-content: space-between; gap: 10px; border-bottom: 1px solid var(--line); }
+  .side { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+
+  /* ---------- map ---------- */
+  .actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 14px 18px 0; }
+  .btn { display: inline-flex; align-items: center; gap: 8px; height: 38px; padding: 0 16px; border-radius: 8px; border: 1px solid var(--line-2); background: var(--panel-2); font-weight: 600; cursor: pointer; transition: border-color .15s, background .15s; }
+  .btn:hover { border-color: var(--muted); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #FFFFFF; }
+  .btn.primary:hover { background: #0B7853; }
+  .btn.active { background: var(--panel); color: var(--warn); border-color: var(--warn); }
+  .btn:focus-visible, .amr:focus-visible, .row:focus-visible { outline: 2px solid var(--info); outline-offset: 2px; }
+  .hint { color: var(--muted); font-size: 13px; }
+  .hint.on { color: var(--warn); font-weight: 500; }
+  .map-wrap { padding: 14px 18px 8px; }
+  svg#map { width: 100%; height: auto; display: block; }
+  svg#map.picking { cursor: crosshair; }
+  svg#map.picking .cell:hover { fill: #E2F1EA; }
+  .legend { display: flex; flex-wrap: wrap; gap: 16px; padding: 4px 18px 16px; color: var(--muted); font-size: 12px; }
+  .legend span { display: inline-flex; align-items: center; gap: 7px; }
+  .sw { width: 14px; height: 10px; display: inline-block; border-radius: 2px; }
+  .amr { transition: transform .35s ease; cursor: pointer; }
+
+  /* ---------- auction ---------- */
+  .auction { border-color: rgba(14, 140, 98, .35); box-shadow: 0 0 0 1px rgba(14, 140, 98, .08), 0 12px 40px -18px rgba(14, 140, 98, .35); }
+  .auction-body { padding: 16px 18px 18px; }
+  .auction-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 4px; }
+  .auction-head .id { font: 700 26px var(--mono); }
+  .auction-route { color: var(--muted); font: 500 13px var(--mono); }
+  .auction-status { display: inline-flex; align-items: center; gap: 6px; font: 600 11px var(--mono); letter-spacing: .1em; text-transform: uppercase; padding: 3px 9px; border-radius: 999px; border: 1px solid var(--line-2); color: var(--muted); white-space: nowrap; }
+  .auction-status.won { color: var(--accent); border-color: rgba(14, 140, 98, .45); background: var(--accent-soft); }
+  .auction-status.bidding { color: var(--warn); border-color: rgba(180, 110, 10, .45); }
+  .auction-status.none { color: var(--critical); border-color: rgba(200, 50, 50, .45); }
+  .bids { list-style: none; margin: 16px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+  .bid { display: grid; grid-template-columns: 70px minmax(0, 1fr) 64px; align-items: center; gap: 12px; }
+  .bid .who { font: 600 13px var(--mono); display: flex; align-items: center; gap: 7px; }
+  .bar { position: relative; height: 26px; background: var(--panel-2); border-radius: 6px; overflow: hidden; }
+  .bar i { position: absolute; inset: 0 auto 0 0; border-radius: 6px; background: #DDE3DC; transform-origin: left; animation: grow .6s ease-out both; }
+  .bar span { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); font: 500 11px var(--mono); color: var(--text); white-space: nowrap; right: 8px; overflow: hidden; text-overflow: ellipsis; }
+  .bid .cost { font: 600 15px var(--mono); text-align: right; }
+  .bid.win .bar { box-shadow: inset 0 0 0 1px rgba(14, 140, 98, .5); }
+  .bid.win .bar i { background: linear-gradient(90deg, rgba(14, 140, 98, .14), rgba(14, 140, 98, .32)); }
+  .bid.win .bar span { color: #0B5E43; font-weight: 600; }
+  .bid.win .cost { color: var(--accent); }
+  .bid.noroute { opacity: .5; }
+  @keyframes grow { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+  .collecting { margin-top: 16px; padding: 18px; border: 1px dashed var(--line-2); border-radius: 8px; color: var(--muted); text-align: center; }
+  .collecting b { color: var(--warn); }
+  .dots::after { content: ""; animation: dots 1.2s steps(4) infinite; }
+  @keyframes dots { 0% { content: ""; } 25% { content: "."; } 50% { content: ".."; } 75% { content: "..."; } }
+  .rule { margin: 14px 0 0; color: var(--dim); font-size: 12px; }
+  .empty { padding: 26px 18px; color: var(--muted); text-align: center; }
+  .empty b { color: var(--text); }
+
+  /* ---------- edge-ai ---------- */
+  .edge-body { padding: 14px 18px 16px; }
+  .risks { display: flex; flex-wrap: wrap; gap: 8px; }
+  .risk { display: inline-flex; align-items: center; gap: 6px; padding: 4px 9px; border-radius: 6px; border: 1px solid var(--line-2); font: 600 11px var(--mono); color: var(--muted); }
+  .risk.LOW { color: var(--accent); border-color: rgba(14, 140, 98, .35); }
+  .risk.MEDIUM { color: var(--warn); border-color: rgba(180, 110, 10, .4); }
+  .risk.HIGH { color: var(--critical); border-color: rgba(200, 50, 50, .45); background: rgba(200, 50, 50, .08); }
+  .advice { margin: 12px 0 0; font-size: 13px; color: var(--muted); }
+  .advice b { color: var(--text); }
+
+  /* ---------- fleet + tasks ---------- */
+  .list { max-height: 300px; overflow: auto; }
+  .row { display: grid; align-items: center; gap: 10px; padding: 10px 18px; border-bottom: 1px solid var(--line); }
+  .row:last-child { border-bottom: 0; }
+  .fleet .row { grid-template-columns: 92px 1fr 64px 52px; cursor: pointer; }
+  .fleet .row:hover, .fleet .row.sel { background: var(--panel-2); }
+  .tasks .row { grid-template-columns: 52px 1fr 70px 96px; }
+  .dot { display: inline-block; width: 10px; height: 10px; border-radius: 3px; flex: none; }
+  .chip { justify-self: start; font: 600 10px var(--mono); letter-spacing: .08em; text-transform: uppercase; padding: 3px 8px; border-radius: 4px; border: 1px solid var(--line-2); color: var(--muted); white-space: nowrap; }
+  .chip.moving { color: var(--accent); border-color: rgba(14, 140, 98, .4); }
+  .chip.waiting { color: var(--warn); border-color: rgba(180, 110, 10, .4); }
+  .chip.error { color: var(--critical); border-color: rgba(200, 50, 50, .4); }
+  .chip.done { color: var(--info); border-color: rgba(37, 99, 186, .4); }
+  .sub { color: var(--muted); font: 12px var(--mono); }
+  .win-col { display: flex; align-items: center; gap: 6px; }
+  .count { font: 500 12px var(--mono); color: var(--dim); letter-spacing: 0; text-transform: none; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .amr, .bar i, .live.running::before, .dots::after { transition: none; animation: none; }
+  }
+  @media (max-width: 1100px) {
+    main { grid-template-columns: 1fr; }
+    .metrics { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  }
+  @media (max-width: 640px) {
+    header { padding: 0 16px; gap: 10px; } .brand span, .clock span:first-child { display: none; }
+    main { padding: 12px 16px 16px; } .metrics { margin: 12px 16px 0; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .fleet .row { grid-template-columns: 80px 1fr 56px; } .fleet .row .sub:last-child { display: none; }
+    .tasks .row { grid-template-columns: 48px 1fr 84px; } .tasks .row .win-col { display: none; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand"><i></i>FIELDLINE <span>Fleet Control</span></div>
+  <div class="live" id="mode" role="status">CONNECTING</div>
+  <div class="clock">
+    <span>Sim time <b id="sim-time">00:00</b></span>
+    <span>Tick <b id="tick">0</b></span>
+  </div>
+</header>
+
+<div class="banner" id="error" role="alert"></div>
+
+<section class="metrics" aria-label="Fleet metrics">
+  <div class="metric"><small>Fleet size</small><b id="m-fleet">–</b></div>
+  <div class="metric"><small>Active tasks</small><b id="m-active">–</b></div>
+  <div class="metric good"><small>Completed</small><b id="m-done">–</b></div>
+  <div class="metric"><small>Waiting AMRs</small><b id="m-wait">–</b></div>
+  <div class="metric"><small>Cells moved</small><b id="m-moves">–</b></div>
+  <div class="metric"><small>Replans</small><b id="m-replans">–</b></div>
+  <div class="metric" id="m-coll-box" title="Same-cell or swap checked by the clock every tick"><small>Collisions</small><b id="m-coll">–</b></div>
+</section>
+
+<main>
+  <section class="panel" aria-label="Warehouse floor">
+    <h2>Warehouse floor <span class="count" id="dims"></span></h2>
+    <div class="actions">
+      <button class="btn primary" id="assign">+ Assign task</button>
+      <button class="btn" id="add-amr">+ Add AMR</button>
+      <span class="hint" id="hint" role="status"></span>
+    </div>
+    <div class="map-wrap"><svg id="map" role="img" aria-label="Warehouse grid with live AMR positions"></svg></div>
+    <div class="legend">
+      <span><i class="sw" style="background:var(--rack)"></i>Rack</span>
+      <span><i class="sw" style="border:1.5px solid var(--accent)"></i>Pickup</span>
+      <span><i class="sw" style="border:1.5px solid var(--info)"></i>Drop-off</span>
+      <span><svg width="22" height="10" aria-hidden="true"><line x1="0" y1="5" x2="22" y2="5" stroke="#5E6B64" stroke-width="3"/></svg>Planned route</span>
+      <span><i class="sw" style="border:1.5px dashed var(--muted)"></i>Next cell</span>
+      <span><i class="sw" style="background:rgba(200, 50, 50, .2);border:1.5px solid var(--critical)"></i>Blocked</span>
+    </div>
+  </section>
+
+  <div class="side">
+    <section class="panel auction" aria-label="Live auction">
+      <h2>Live auction <span class="count">run by AMR-1</span></h2>
+      <div id="auction" aria-live="polite"></div>
+    </section>
+
+    <section class="panel edge" aria-label="Edge-AI safety advisor">
+      <h2>Edge-AI safety advisor <span class="count" id="ai-count"></span></h2>
+      <div class="edge-body">
+        <div class="risks" id="ai-risks"></div>
+        <p class="advice" id="ai-advice"></p>
+        <p class="rule">An on-board model rates each next move LOW / MEDIUM / HIGH risk. Advisory only: the priority rules make the final call.</p>
+      </div>
+    </section>
+
+    <section class="panel fleet" aria-label="Fleet">
+      <h2>Fleet <span class="count" id="fleet-count"></span></h2>
+      <div class="list" id="fleet"><div class="empty">Waiting for controllers…</div></div>
+    </section>
+
+    <section class="panel tasks" aria-label="Tasks">
+      <h2>Tasks <span class="count" id="task-count"></span></h2>
+      <div class="list" id="tasks"></div>
+    </section>
+  </div>
+</main>
+
+<script>
+const COLORS = ["#0E8C62", "#2563BA", "#C27A0E", "#7C4DDB", "#D9572F", "#0B8FA0", "#C93A84", "#4F8A16", "#A87A08", "#4361C9"];
+const STATE = {
+  READY: "Idle", IDLE: "Idle", BUSY: "Assigned", INTENT: "Moving", MOVING: "Moving",
+  EDGE_AI: "Moving", WAITING: "Waiting", REPLANNING: "Rerouting", OBSTACLE: "Blocked",
+  PICKUP_REACHED: "At pickup", TASK_COMPLETE: "Delivered", TASK_FAILED: "Error",
+};
+const CHIP = { Moving: "moving", Assigned: "moving", "At pickup": "moving", Waiting: "waiting", Rerouting: "waiting", Blocked: "waiting", Delivered: "done", Error: "error" };
+const TASK_STATE = {
+  AUCTION: ["Bidding", "waiting"], ASSIGNED: ["To pickup", "moving"], TO_DROPOFF: ["To drop-off", "moving"],
+  COMPLETED: ["Delivered", "done"], FAILED: ["Failed", "error"], UNASSIGNED: ["No route", "error"],
+};
+const OPEN = ["AUCTION", "ASSIGNED", "TO_DROPOFF"];
+const HINT = "Assign a task and watch the AMRs bid: the shortest total route wins.";
+const CELL = 40, PAD = 26;
+
+let scenario = null, state = null, selected = null;
+let picking = null;  // null, { kind: "task", pickup: [x, y] | null } or { kind: "amr" } while picking a cell
+const trails = {}, colorOf = {};
+const $ = id => document.getElementById(id);
+
+const px = x => PAD + x * CELL + CELL / 2;
+const py = y => PAD + (scenario.height - 1 - y) * CELL + CELL / 2;   // row 0 at the bottom
+const label = s => STATE[s] || s || "—";
+const cell = c => c ? `(${c[0]},${c[1]})` : "—";
+const fmtTime = s => `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
+const dot = id => `<i class="dot" style="background:${colorOf[id] || "var(--dim)"}"></i>`;
+
+async function api(path, body) {
+  const res = await fetch(path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+  if (!res.ok) { const e = await res.json().catch(() => ({})); alert(Array.isArray(e.detail) ? "Invalid cell" : e.detail || res.statusText); }
+}
+
+// ---------------------------------------------------------------- picking cells
+
+function setPicking(p) {
+  picking = p;
+  $("map").classList.toggle("picking", !!p);
+  $("assign").classList.toggle("active", p?.kind === "task");
+  $("assign").classList.toggle("primary", p?.kind !== "task");
+  $("assign").textContent = p?.kind === "task" ? "Cancel" : "+ Assign task";
+  $("add-amr").classList.toggle("active", p?.kind === "amr");
+  $("add-amr").textContent = p?.kind === "amr" ? "Cancel" : "+ Add AMR";
+  $("hint").classList.toggle("on", !!p);
+  $("hint").textContent = !p ? HINT
+    : p.kind === "amr" ? "Click a free cell to place the new AMR · Esc to cancel"
+    : !p.pickup ? "Click the pickup cell · Esc to cancel"
+    : `Pickup ${cell(p.pickup)} · now click the drop-off cell`;
+  if (state) drawDynamic();
+}
+$("assign").onclick = () => setPicking(picking?.kind === "task" ? null : { kind: "task", pickup: null });
+$("add-amr").onclick = () => setPicking(picking?.kind === "amr" ? null : { kind: "amr" });
+document.addEventListener("keydown", e => e.key === "Escape" && picking && setPicking(null));
+
+function cellAt(evt) {
+  const svg = $("map"), pt = svg.createSVGPoint();
+  pt.x = evt.clientX; pt.y = evt.clientY;
+  const { x, y } = pt.matrixTransform(svg.getScreenCTM().inverse());
+  const cx = Math.floor((x - PAD) / CELL), cy = scenario.height - 1 - Math.floor((y - PAD) / CELL);
+  return cx >= 0 && cx < scenario.width && cy >= 0 && cy < scenario.height ? [cx, cy] : null;
+}
+
+function pick(evt) {
+  const c = picking && cellAt(evt);
+  if (!c) return;
+  if (scenario.obstacles.some(o => o[0] === c[0] && o[1] === c[1])) return alert(`${cell(c)} is a rack. Pick a free cell.`);
+  if (picking.kind === "amr") { setPicking(null); return api("/api/amrs", { start: c }); }
+  if (!picking.pickup) return setPicking({ kind: "task", pickup: c });
+  const pickup = picking.pickup;
+  setPicking(null);
+  api("/api/tasks", { pickup, dropoff: c });
+}
+
+// ---------------------------------------------------------------- map
+
+function drawStatic() {
+  const w = scenario.width, h = scenario.height, svg = $("map");
+  svg.setAttribute("viewBox", `0 0 ${PAD * 2 + w * CELL} ${PAD * 2 + h * CELL}`);
+  $("dims").textContent = `${w} × ${h} cells`;
+  let g = `<defs>
+    <pattern id="hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="6" stroke="#66726B" stroke-width="2"/></pattern>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%"><feDropShadow dx="0" dy="1.5" stdDeviation="1.5" flood-color="#17201B" flood-opacity=".28"/></filter>
+  </defs>
+  <rect x="${PAD - 4}" y="${PAD - 4}" width="${w * CELL + 8}" height="${h * CELL + 8}" rx="8" fill="var(--floor)" stroke="var(--line-2)"/>`;
+  for (let x = 0; x < w; x++) for (let y = 0; y < h; y++)
+    g += `<rect class="cell" x="${px(x) - CELL / 2}" y="${py(y) - CELL / 2}" width="${CELL}" height="${CELL}" fill="var(--floor)" stroke="var(--floor-line)"/>`;
+  for (let x = 0; x < w; x++) g += `<text class="mono" x="${px(x)}" y="${PAD + h * CELL + 18}" font-size="10" fill="#56677A" text-anchor="middle">${x}</text>`;
+  for (let y = 0; y < h; y++) g += `<text class="mono" x="${PAD - 13}" y="${py(y) + 3}" font-size="10" fill="#56677A" text-anchor="middle">${y}</text>`;
+  for (const [x, y] of scenario.obstacles)
+    g += `<g><rect x="${px(x) - CELL / 2 + 3}" y="${py(y) - CELL / 2 + 3}" width="${CELL - 6}" height="${CELL - 6}" rx="3" fill="var(--rack)"/>
+      <rect x="${px(x) - CELL / 2 + 3}" y="${py(y) - CELL / 2 + 3}" width="${CELL - 6}" height="${CELL - 6}" rx="3" fill="url(#hatch)" opacity=".6"/><title>Rack (${x},${y})</title></g>`;
+  svg.innerHTML = `<g id="static">${g}</g><g id="dynamic"></g>`;
+  svg.onclick = pick;
+}
+
+function marker(c, kind, color, name) {
+  return `<g pointer-events="none"><rect x="${px(c[0]) - 16}" y="${py(c[1]) - 16}" width="32" height="32" rx="5" fill="none" stroke="${color}" stroke-width="2"/>
+    <text class="mono" x="${px(c[0])}" y="${py(c[1]) + 4}" font-size="10" font-weight="600" fill="${color}" text-anchor="middle">${kind}${name.replace("T-", "")}</text></g>`;
+}
+
+function heading(amr) {
+  const p = amr.position, n = amr.next_position || trails[amr.amr_id]?.dir;
+  if (!p || !n || (n[0] === p[0] && n[1] === p[1])) return null;
+  return Math.atan2(-(n[1] - p[1]), n[0] - p[0]) * 180 / Math.PI;
+}
+
+function drawDynamic() {
+  let g = "";
+  const blocked = new Set();
+  state.amrs.forEach(a => a.dynamic_obstacles.forEach(c => blocked.add(c.join(","))));
+  for (const k of blocked) {
+    const [x, y] = k.split(",").map(Number);
+    g += `<g pointer-events="none"><rect x="${px(x) - CELL / 2 + 3}" y="${py(y) - CELL / 2 + 3}" width="${CELL - 6}" height="${CELL - 6}" rx="3" fill="rgba(200, 50, 50, .18)" stroke="var(--critical)" stroke-width="1.5"/>
+      <path d="M${px(x) - 8} ${py(y) - 8} L${px(x) + 8} ${py(y) + 8} M${px(x) + 8} ${py(y) - 8} L${px(x) - 8} ${py(y) + 8}" stroke="var(--critical)" stroke-width="2"/></g>`;
+  }
+  for (const t of state.tasks.filter(t => OPEN.includes(t.status))) {
+    if (t.status !== "TO_DROPOFF") g += marker(t.pickup, "P", "var(--accent)", t.task_id);
+    g += marker(t.dropoff, "D", "var(--info)", t.task_id);
+  }
+  if (picking?.pickup) g += marker(picking.pickup, "P", "var(--warn)", "·");
+  for (const a of state.amrs) {
+    const color = colorOf[a.amr_id], dim = selected && selected !== a.amr_id ? .2 : 1;
+    const trail = trails[a.amr_id]?.cells || [];
+    if (trail.length > 1) g += `<polyline pointer-events="none" points="${trail.map(c => `${px(c[0])},${py(c[1])}`).join(" ")}" fill="none" stroke="${color}" stroke-width="3" opacity="${.18 * dim}" stroke-linejoin="round"/>`;
+    const route = a.path.slice(a.path_index);
+    if (route.length > 1) g += `<polyline pointer-events="none" points="${route.map(c => `${px(c[0])},${py(c[1])}`).join(" ")}" fill="none" stroke="${color}" stroke-width="${selected === a.amr_id ? 4 : 2.5}" stroke-dasharray="6 5" opacity="${.85 * dim}" stroke-linejoin="round"/>`;
+    if (a.next_position) g += `<rect pointer-events="none" x="${px(a.next_position[0]) - 14}" y="${py(a.next_position[1]) - 14}" width="28" height="28" rx="4" fill="none" stroke="${color}" stroke-dasharray="3 3" opacity="${dim}"/>`;
+  }
+  for (const a of state.amrs) {
+    if (!a.position) continue;
+    const color = colorOf[a.amr_id], sel = selected === a.amr_id, h = heading(a);
+    const wait = ["WAITING", "OBSTACLE"].includes(a.status);
+    g += `<g class="amr" data-id="${a.amr_id}" transform="translate(${px(a.position[0])} ${py(a.position[1])})" tabindex="0" role="button" aria-label="${a.amr_id}, ${label(a.status)}, cell ${cell(a.position)}" opacity="${selected && !sel ? .45 : 1}">
+      ${sel ? `<circle r="21" fill="none" stroke="${color}" stroke-width="2" opacity=".6"/>` : ""}
+      ${wait ? `<circle r="18" fill="none" stroke="var(--warn)" stroke-width="2" stroke-dasharray="4 3"/>` : ""}
+      <rect x="-14" y="-14" width="28" height="28" rx="7" fill="${color}" filter="url(#glow)"/>
+      ${h === null ? "" : `<path d="M21 0 L14 -5 L14 5 Z" fill="${color}" transform="rotate(${h})"/>`}
+      <text class="mono" y="4" font-size="11" font-weight="700" text-anchor="middle" fill="#FFFFFF">${a.amr_id.replace("AMR-", "A")}</text>
+      <title>${a.amr_id} · ${label(a.status)} · ${cell(a.position)}</title></g>`;
+  }
+  $("dynamic").innerHTML = g;
+  document.querySelectorAll(".amr").forEach(el => {
+    // While picking a cell, clicks fall through to the map instead of selecting the AMR.
+    el.onclick = e => { if (!picking) { e.stopPropagation(); select(el.dataset.id); } };
+    el.onkeydown = e => (e.key === "Enter" || e.key === " ") && select(el.dataset.id);
+  });
+}
+
+function select(id) { selected = selected === id ? null : id; render(state); }
+
+// ---------------------------------------------------------------- panels
+
+function auctionCard(s) {
+  const t = s.tasks[s.tasks.length - 1];
+  if (!t) return `<div class="empty"><b>No auctions yet.</b><br>Press “+ Assign task” and pick a pickup and drop-off.<br>Every idle AMR bids its route length; the shortest wins.</div>`;
+  const status = t.status === "AUCTION" ? ["Collecting bids", "bidding"]
+    : t.status === "UNASSIGNED" ? ["No winner", "none"] : [`Won by ${t.winner}`, "won"];
+  let body;
+  if (t.status === "AUCTION") {
+    body = `<div class="collecting">AMR-1 announced <b>${t.task_id}</b> to the fleet.<br>Idle AMRs are computing their routes<span class="dots"></span></div>`;
+  } else {
+    const max = Math.max(1, ...t.bids.map(b => b.cost || 0));
+    body = `<ol class="bids">${t.bids.map(b => {
+      const win = b.amr_id === t.winner, none = b.cost == null;
+      const pct = none ? 100 : Math.max(8, b.cost / max * 100);
+      const why = none ? "no route" : `${b.distance_to_pickup} to pickup + ${b.cost - b.distance_to_pickup} delivery`;
+      return `<li class="bid ${win ? "win" : ""} ${none ? "noroute" : ""}">
+        <span class="who">${dot(b.amr_id)}${b.amr_id.replace("AMR-", "A")}</span>
+        <span class="bar"><i style="width:${pct}%"></i><span>${win ? "✓ WINNER · " : ""}${why}</span></span>
+        <span class="cost">${none ? "—" : b.cost}</span></li>`;
+    }).join("")}</ol>
+    ${t.status === "UNASSIGNED" ? `<p class="rule" style="color:var(--critical)">No AMR could take this task.</p>` : ""}`;
+  }
+  return `<div class="auction-body">
+    <div class="auction-head"><span class="id">${t.task_id}</span><span class="auction-status ${status[1]}">${status[0]}</span></div>
+    <div class="auction-route">pickup ${cell(t.pickup)} → drop-off ${cell(t.dropoff)}</div>
+    ${body}
+    <p class="rule">Bid = cells to the pickup + cells from pickup to drop-off (A* routes around racks). Lowest bid wins; busy AMRs sit out.</p>
+  </div>`;
+}
+
+function fleetRows(s) {
+  if (!s.amrs.length) return `<div class="empty">Waiting for controllers…</div>`;
+  return s.amrs.map(a => {
+    const l = label(a.status);
+    return `<div class="row ${selected === a.amr_id ? "sel" : ""}" data-id="${a.amr_id}" tabindex="0" role="button" aria-pressed="${selected === a.amr_id}">
+      <span class="mono" style="display:flex;align-items:center;gap:8px;font-weight:600">${dot(a.amr_id)}${a.amr_id}</span>
+      <span class="chip ${CHIP[l] || ""}">${l}</span>
+      <span class="sub">${cell(a.position)}</span>
+      <span class="sub">${a.task_id || "—"}</span></div>`;
+  }).join("");
+}
+
+function taskRows(s) {
+  if (!s.tasks.length) return `<div class="empty">No tasks yet.</div>`;
+  return s.tasks.slice().reverse().map(t => {
+    const st = TASK_STATE[t.status] || [t.status, ""];
+    return `<div class="row">
+      <span class="mono" style="font-weight:600">${t.task_id}</span>
+      <span class="sub">${cell(t.pickup)} → ${cell(t.dropoff)}</span>
+      <span class="sub win-col">${t.winner ? `${dot(t.winner)}${t.winner.replace("AMR-", "A")} · ${t.cost}` : "—"}</span>
+      <span class="chip ${st[1]}">${st[0]}</span></div>`;
+  }).join("");
+}
+
+function edgeAi(s) {
+  const decisions = s.amrs.reduce((n, a) => n + (a.edge_ai.decisions || 0), 0);
+  $("ai-count").textContent = `${decisions} move${decisions === 1 ? "" : "s"} assessed`;
+  $("ai-risks").innerHTML = s.amrs.map(a => {
+    const r = a.edge_ai.risk_level, known = r && r !== "UNKNOWN";
+    return `<span class="risk ${known ? r : ""}" title="${a.amr_id}: ${known ? `${r} risk, advised ${a.edge_ai.action}` : "no move assessed yet"}">${dot(a.amr_id)}${a.amr_id.replace("AMR-", "A")} ${known ? `${r} ${Math.round(a.edge_ai.confidence)}%` : "—"}</span>`;
+  }).join("");
+  const last = s.events.filter(e => e.type === "EDGE_AI_ADVICE").pop();
+  $("ai-advice").innerHTML = last
+    ? `Latest: <b>${last.amr_id}</b> rated its move to ${cell(last.data.next_position)} <b>${last.data.risk_level}</b> risk (${Math.round(last.data.confidence)}%) and advised <b>${last.data.action}</b> · tick ${last.tick}`
+    : "No risky moves flagged yet. Every move so far was rated safe to proceed.";
+}
+
+// ---------------------------------------------------------------- render
+
+let lastAuction = "";
+
+function render(s) {
+  if (!s) return;
+  state = s;
+  s.amrs.forEach(a => {
+    colorOf[a.amr_id] ??= COLORS[(parseInt(a.amr_id.replace("AMR-", ""), 10) - 1) % COLORS.length];
+    const t = trails[a.amr_id] ??= { cells: [], dir: null };
+    const last = t.cells[t.cells.length - 1];
+    if (a.position && (!last || last[0] !== a.position[0] || last[1] !== a.position[1])) {
+      if (last) t.dir = [a.position[0] + (a.position[0] - last[0]), a.position[1] + (a.position[1] - last[1])];
+      t.cells.push(a.position);
+      if (t.cells.length > 40) t.cells.shift();
+    }
+  });
+
+  const mode = $("mode");
+  mode.className = `live ${s.mode}`;
+  mode.textContent = { running: "LIVE", starting: "STARTING", error: "ERROR", stopped: "STOPPED" }[s.mode] || s.mode;
+  $("sim-time").textContent = fmtTime(s.sim_time);
+  $("tick").textContent = s.tick;
+  $("error").style.display = s.error ? "block" : "none";
+  $("error").textContent = s.error ? `Fleet error: ${s.error}. Restart run_demo.py to recover.` : "";
+
+  const sum = k => s.amrs.reduce((n, a) => n + (a.metrics[k] || 0), 0);
+  $("m-fleet").textContent = s.amrs.length;
+  $("m-active").textContent = s.tasks.filter(t => OPEN.includes(t.status)).length;
+  $("m-done").textContent = s.tasks.filter(t => t.status === "COMPLETED").length;
+  $("m-wait").textContent = s.amrs.filter(a => a.status === "WAITING").length;
+  $("m-moves").textContent = sum("moves");
+  $("m-replans").textContent = sum("replans");
+  $("m-coll").textContent = s.collisions.length;
+  $("m-coll-box").className = `metric ${s.collisions.length ? "bad" : "good"}`;
+
+  // Re-render the auction card only when it changes, so the bar animation plays once.
+  const t = s.tasks[s.tasks.length - 1];
+  const key = t ? `${t.task_id}:${t.status === "AUCTION" ? "a" : t.winner}` : "";
+  if (key !== lastAuction) { lastAuction = key; $("auction").innerHTML = auctionCard(s); }
+
+  edgeAi(s);
+  $("fleet-count").textContent = `${s.amrs.length} AMR${s.amrs.length === 1 ? "" : "s"}`;
+  $("fleet").innerHTML = fleetRows(s);
+  document.querySelectorAll(".fleet .row[data-id]").forEach(r => {
+    r.onclick = () => select(r.dataset.id);
+    r.onkeydown = e => (e.key === "Enter" || e.key === " ") && select(r.dataset.id);
+  });
+  $("task-count").textContent = s.tasks.length ? `${s.tasks.length} total` : "";
+  $("tasks").innerHTML = taskRows(s);
+
+  if (scenario) drawDynamic();
+}
+
+function connect() {
+  const ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws`);
+  ws.onmessage = m => render(JSON.parse(m.data));
+  ws.onclose = () => { $("mode").className = "live error"; $("mode").textContent = "DISCONNECTED"; setTimeout(connect, 1500); };
+}
+
+$("hint").textContent = HINT;
+fetch("/api/scenario").then(r => r.json()).then(s => {
+  scenario = s;
+  drawStatic();
+  connect();
+});
+</script>
+</body>
+</html>
