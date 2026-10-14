@@ -230,6 +230,23 @@ class GatedMovementTests(unittest.TestCase):
         self.assertEqual(self.fc.position, (2, 1))
         self.assertEqual(self.fc.waiting_steps, 0)
 
+    def test_wait_cycle_is_logged_once_and_changes_no_decision(self):
+        # Head-on with a lower-priority peer: AMR-1 still WAITs and acks every tick.
+        self.fc.known_amrs["AMR-2"] = {
+            "position": (2, 1), "next_position": (1, 1),
+            "target": None, "status": "WAITING", "timestamp": time.time(),
+        }
+        with mock.patch("builtins.print") as printed:
+            self.drive((3, 1))
+            self.run_tick(1)
+            self.fc.known_amrs["AMR-2"]["timestamp"] = time.time()
+            self.run_tick(2)
+
+        cycle_logs = [c for c in printed.call_args_list if "WAIT CYCLE" in str(c)]
+        self.assertEqual(len(cycle_logs), 1)
+        self.assertEqual(self.fc.position, (1, 1))
+        self.assertEqual(self.last_status(), "WAITING")
+
 
 class EdgeAiYieldTests(unittest.TestCase):
 
