@@ -9,6 +9,8 @@ import queue
 
 from edge_ai_integration import assess_risk, get_edge_ai_model
 
+from deadlock_detector import find_wait_cycles
+
 
 from scenario import (
     WIDTH,
@@ -2866,6 +2868,58 @@ def release_amr(
 
 
 # ============================================================
+# WAIT-CYCLE (DEADLOCK) DETECTION
+# Advisory only: logs cycles, never changes a movement decision.
+# Runs only on ticks where this AMR is blocked.
+# ============================================================
+
+# Wait cycles including this AMR that are already logged.
+reported_wait_cycles = set()
+
+
+def build_wait_for_graph(next_position):
+    """Edge A -> B when A's announced next cell is B's current cell.
+
+    That is the cell the occupied-cell safety check refuses to enter,
+    so A cannot progress until B leaves. Only fresh peer state is used.
+    """
+
+    states = {amr_id: (position, next_position)}
+
+    for peer_id, peer in get_active_peers().items():
+        states[peer_id] = (peer["position"], peer["next_position"])
+
+    occupant = {cell: robot_id for robot_id, (cell, _) in states.items()}
+
+    return {
+        robot_id: {occupant[wanted]}
+        for robot_id, (_, wanted) in states.items()
+        if wanted in occupant and occupant[wanted] != robot_id
+    }
+
+
+def report_wait_cycles(next_position):
+    """Log each wait cycle including this AMR once while it persists."""
+
+    cycles = {
+        cycle
+        for cycle in find_wait_cycles(build_wait_for_graph(next_position))
+        if amr_id in cycle
+    }
+
+    for cycle in sorted(cycles - reported_wait_cycles):
+        print(
+            f"[{amr_id}] "
+            f"WAIT CYCLE DETECTED (advisory) | "
+            f"{' -> '.join(cycle + cycle[:1])}"
+        )
+
+    # A cycle that has gone is dropped, so its return is logged again.
+    reported_wait_cycles.clear()
+    reported_wait_cycles.update(cycles)
+
+
+# ============================================================
 # BLOCKED-MOVE RECOVERY
 # A higher-priority AMR that keeps WAITING (moving peer, head-on,
 # occupied cell) replans after a timeout instead of waiting forever.
@@ -2878,12 +2932,14 @@ BLOCKED_REPLAN_THRESHOLD = 3
 BLOCKED_REPLAN_RETRY_TICKS = 3
 
 
-def record_blocked_tick():
+def record_blocked_tick(next_position):
     """Count a blocked tick; replan on the threshold tick and every retry interval after."""
 
     global waiting_steps
 
     waiting_steps += 1
+
+    report_wait_cycles(next_position)
 
     overdue = waiting_steps - BLOCKED_REPLAN_THRESHOLD
 
@@ -3110,6 +3166,8 @@ def drive_to(
 
                     waiting_steps += 1
 
+                    report_wait_cycles(next_position)
+
 
                     continue
 
@@ -3127,7 +3185,7 @@ def drive_to(
                         next_position
                     )
 
-                    record_blocked_tick()
+                    record_blocked_tick(next_position)
 
 
                     continue
@@ -3159,7 +3217,7 @@ def drive_to(
                     next_position
                 )
 
-                record_blocked_tick()
+                record_blocked_tick(next_position)
 
 
                 continue
@@ -3179,6 +3237,9 @@ def drive_to(
 
                 move_count += 1
                 waiting_steps = 0
+
+            # Having moved, this AMR is in no wait cycle; a later one is new.
+            reported_wait_cycles.clear()
 
 
             print(
